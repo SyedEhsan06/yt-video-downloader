@@ -29,6 +29,41 @@ os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 # If this file exists it is automatically used for all YouTube requests.
 SERVER_COOKIES_FILE = os.path.join(BASE_DIR, 'cookies.txt')
 
+
+def _resolve_ffmpeg():
+    """Return a path to an ffmpeg binary named exactly 'ffmpeg'. Prefers a system
+    install; otherwise uses the static binary bundled by imageio-ffmpeg (works on
+    hosts like Render where apt-get isn't available). The imageio binary has a
+    versioned name, but yt-dlp only accepts binaries named ffmpeg/ffprobe, so we
+    expose it through a normalized symlink."""
+    system = shutil.which('ffmpeg')
+    if system:
+        return system
+    try:
+        import imageio_ffmpeg
+        raw = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as e:
+        print(f"[ffmpeg] Could not resolve a bundled ffmpeg binary: {e}", flush=True)
+        return None
+
+    norm_dir = os.path.join(tempfile.gettempdir(), 'ffmpeg_bin')
+    norm = os.path.join(norm_dir, 'ffmpeg')
+    try:
+        os.makedirs(norm_dir, exist_ok=True)
+        os.chmod(raw, 0o755)
+        if os.path.islink(norm) or os.path.exists(norm):
+            os.remove(norm)
+        os.symlink(raw, norm)
+        return norm
+    except Exception as e:
+        print(f"[ffmpeg] Could not normalize bundled binary name ({e}); using raw path.", flush=True)
+        return raw
+
+
+# Resolved once at startup and reused for all yt-dlp merges and subprocess calls.
+FFMPEG_BIN = _resolve_ffmpeg()
+print(f"[ffmpeg] Using binary: {FFMPEG_BIN}", flush=True)
+
 # ── YouTube Invidious fallback ─────────────────────────────────────────────
 # When YouTube blocks the server IP, the app automatically retries by querying
 # these public Invidious instances to obtain signed stream URLs.
@@ -117,7 +152,7 @@ def _stream_download(url, dest_path, task_id, pct_start=0, pct_end=100):
 
 def _invidious_download(task_id, url, quality, download_type, task_dir):
     """Fallback YouTube downloader via Invidious API. Returns True on success."""
-    if not shutil.which('ffmpeg'):
+    if not FFMPEG_BIN:
         print("[Invidious] FATAL: FFmpeg is not installed on this server. Fallback cannot merge streams.")
         with task_lock:
             if task_id in download_tasks:
@@ -171,7 +206,7 @@ def _invidious_download(task_id, url, quality, download_type, task_dir):
                 download_tasks[task_id]['speed'] = 'Converting to MP3...'
 
         res = subprocess.run(
-            ['ffmpeg', '-y', '-i', a_path, '-codec:a', 'libmp3lame', '-q:a', '2', mp3_path],
+            [FFMPEG_BIN, '-y', '-i', a_path, '-codec:a', 'libmp3lame', '-q:a', '2', mp3_path],
             capture_output=True
         )
         try:
@@ -225,7 +260,7 @@ def _invidious_download(task_id, url, quality, download_type, task_dir):
                     download_tasks[task_id]['speed'] = 'Merging streams...'
 
             res = subprocess.run(
-                ['ffmpeg', '-y', '-i', v_path, '-i', a_path,
+                [FFMPEG_BIN, '-y', '-i', v_path, '-i', a_path,
                  '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental', out_path],
                 capture_output=True
             )
@@ -503,6 +538,10 @@ def download_thread(task_id, url, quality, download_type):
             }
         }
     }
+    # Point yt-dlp at the resolved ffmpeg binary (bundled via imageio-ffmpeg on
+    # hosts without a system ffmpeg) so stream merging and mp3 extraction work.
+    if FFMPEG_BIN:
+        base_opts['ffmpeg_location'] = FFMPEG_BIN
 
     # Auto-load server-side cookies.txt if it exists (highest-priority bypass)
     if os.path.exists(SERVER_COOKIES_FILE):
