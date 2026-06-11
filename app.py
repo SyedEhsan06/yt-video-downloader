@@ -179,17 +179,28 @@ def download_thread(task_id, url, quality, download_type):
     cookie_path = None
 
     # Determine yt-dlp options based on download request
-    # Base options with YouTube anti-bot bypass (Android client + headers)
+    # YouTube anti-bot bypass: use TV embedded + iOS clients which work on server IPs
+    # without requiring cookies or PO tokens
     base_opts = {
         'quiet': True,
         'no_warnings': True,
         'noprogress': True,
         'logger': YTDLLogger(),
-        'user_agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['tv_embedded', 'ios', 'android'],
+                'skip': ['translated_subs'],
+            }
+        },
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'User-Agent': 'com.google.ios.youtube/19.29.1 CFNetwork/1408.0.4 Darwin/22.5.0',
             'Accept-Language': 'en-US,en;q=0.9',
         },
+        'retries': 5,
+        'fragment_retries': 5,
+        'sleep_interval': 1,
+        'max_sleep_interval': 5,
+        'sleep_interval_requests': 1,
     }
     
     if download_type == 'mp3':
@@ -333,17 +344,28 @@ def get_formats():
     if not url:
         return jsonify({'error': 'URL cannot be empty'}), 400
         
-    # YouTube anti-bot bypass options (Android client + headers)
+    # YouTube anti-bot bypass: use TV embedded + iOS clients which work on server IPs
+    # without requiring cookies or PO tokens
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'skip_download': True,
         'logger': YTDLLogger(),
-        'user_agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['tv_embedded', 'ios', 'android'],
+                'skip': ['translated_subs'],
+            }
+        },
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'User-Agent': 'com.google.ios.youtube/19.29.1 CFNetwork/1408.0.4 Darwin/22.5.0',
             'Accept-Language': 'en-US,en;q=0.9',
         },
+        'retries': 5,
+        'fragment_retries': 5,
+        'sleep_interval': 1,
+        'max_sleep_interval': 5,
+        'sleep_interval_requests': 1,
     }
 
     # Optional cookies support (pass Netscape cookie file contents via JSON 'cookies'
