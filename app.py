@@ -453,12 +453,13 @@ def progress_hook(task_id):
 
 class YTDLLogger:
     def debug(self, msg):
-        pass
-    def warning(self, msg):
-        pass
-    def error(self, msg):
-        pass
+        print(msg)
 
+    def warning(self, msg):
+        print(msg)
+
+    def error(self, msg):
+        print(msg)
 def download_thread(task_id, url, quality, download_type):
     """Task target function executing downloading in background."""
     task_dir = os.path.join(DOWNLOADS_DIR, task_id)
@@ -476,7 +477,6 @@ def download_thread(task_id, url, quality, download_type):
         'retries': 5,
         'fragment_retries': 5,
         # Bypasses: Impersonate a real browser and use server-friendly clients
-        'impersonate': 'chrome',
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv_embedded', 'ios', 'android', 'default'],
@@ -654,7 +654,6 @@ def get_formats():
         'logger': YTDLLogger(),
         'retries': 3,
         # Bypasses: Impersonate a real browser and use server-friendly clients
-        'impersonate': 'chrome',
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv_embedded', 'ios', 'android', 'default'],
