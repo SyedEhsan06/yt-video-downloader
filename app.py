@@ -667,7 +667,6 @@ def get_formats():
         'skip_download': True,
         'logger': YTDLLogger(),
         'retries': 3,
-        'format': 'bestvideo*+bestaudio/bestvideo/bestaudio/best',
         'extractor_args': {
             'youtube': {
                 'player_client': ['ios', 'android', 'tv_embedded', 'default'],
@@ -703,8 +702,9 @@ def get_formats():
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Fetch metadata
-            info = ydl.extract_info(url, download=False)
+            # process=False skips format selection entirely — we just want the raw
+            # format list so we never hit "Requested format is not available"
+            info = ydl.extract_info(url, download=False, process=False)
             
             title = info.get('title', 'Video Title')
             duration_secs = info.get('duration', 0)
