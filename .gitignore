@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Downloads folder (user files)
+downloads/
+
+# Cookies (may contain sensitive session data)
+cookies.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.env

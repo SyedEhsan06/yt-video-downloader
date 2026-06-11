@@ -490,8 +490,6 @@ def download_thread(task_id, url, quality, download_type):
         'logger': YTDLLogger(),
         'retries': 5,
         'fragment_retries': 5,
-        # Bypasses: Impersonate a real browser and use server-friendly clients
-        'impersonate': 'chrome',
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv_embedded', 'ios', 'android', 'default'],
@@ -669,8 +667,6 @@ def get_formats():
         'skip_download': True,
         'logger': YTDLLogger(),
         'retries': 3,
-        # Bypasses: Impersonate a real browser and use server-friendly clients
-        'impersonate': 'chrome',
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv_embedded', 'ios', 'android', 'default'],
@@ -898,4 +894,4 @@ def download_file(task_id):
     return send_file(filepath, as_attachment=True, download_name=filename)
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False)
+    app.run(host='127.0.0.1', port=5001, debug=True, use_reloader=False)
