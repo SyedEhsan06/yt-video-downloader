@@ -68,21 +68,16 @@ print(f"[ffmpeg] Using binary: {FFMPEG_BIN}", flush=True)
 # When YouTube blocks the server IP, the app automatically retries by querying
 # these public Invidious instances to obtain signed stream URLs.
 _INVIDIOUS_INSTANCES = [
-    'https://yewtu.be',
-    'https://inv.tux.pizza',
-    'https://invidious.privacydev.net',
-    'https://invidious.flokinet.to',
-    'https://inv.riverside.rocks',
-    'https://invidious.nerdvpn.de',
-    'https://invidious.perennialte.ch',
-    'https://iv.datura.network',
-    'https://invidious.jing.rocks',
-    'https://invidious.io.lol',
-    'https://invidious.fdn.fr',
-    'https://invidious.protokolla.fi',
     'https://iv.melmac.space',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.flokinet.to',
+    'https://invidious.perennialte.ch',
+    'https://yewtu.be',
+    'https://invidious.io.lol',
+    'https://invidious.protokolla.fi',
     'https://invidious.asir.dev',
     'https://invidious.darkness.services',
+    'https://inv.tux.pizza',
 ]
 _SSL_CTX = ssl.create_default_context()
 _UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
@@ -103,17 +98,27 @@ def _extract_youtube_id(url):
     return None
 
 
+# Bound the Invidious sweep so a worker can never be killed by gunicorn's
+# request timeout (instances are often slow/unreachable from datacenter IPs).
+_INVIDIOUS_TIMEOUT = 5      # seconds per instance
+_INVIDIOUS_BUDGET = 25      # seconds total across all instances
+
+
 def _invidious_fetch(video_id):
-    """Query Invidious instances until one returns valid video data.
-    Returns (data_dict, instance_base_url) or (None, None)."""
+    """Query Invidious instances until one returns valid video data, within a
+    fixed overall time budget. Returns (data_dict, instance_base_url) or (None, None)."""
     fields = 'title,lengthSeconds,videoThumbnails,adaptiveFormats,formatStreams'
+    deadline = time.time() + _INVIDIOUS_BUDGET
     for base in _INVIDIOUS_INSTANCES:
+        if time.time() >= deadline:
+            print("[Invidious] Time budget exhausted; stopping instance sweep.")
+            break
         try:
             req = urllib.request.Request(
                 f'{base}/api/v1/videos/{video_id}?fields={fields}',
                 headers={'User-Agent': _UA},
             )
-            with urllib.request.urlopen(req, timeout=12, context=_SSL_CTX) as r:
+            with urllib.request.urlopen(req, timeout=_INVIDIOUS_TIMEOUT, context=_SSL_CTX) as r:
                 if r.status == 200:
                     data = json.loads(r.read().decode('utf-8'))
                     if data.get('adaptiveFormats') or data.get('formatStreams'):
@@ -861,15 +866,9 @@ def get_formats():
         
         user_msg = "Failed to retrieve formats."
         
-        # Auto-retry via Invidious when YouTube blocks the server IP
+        # Invidious was already tried first for YouTube URLs, so don't sweep all
+        # instances again here (that risked a gunicorn worker timeout → 502).
         if is_yt and is_bot:
-            try:
-                inv_data = _invidious_formats(url)
-            except Exception as inv_err:
-                inv_data = None
-                print(f"[Error Handler] Invidious fallback raised: {inv_err}", flush=True)
-            if inv_data:
-                return jsonify(inv_data)
             user_msg = "YouTube is blocking this server and the automatic fallback also failed. Please try again in a few minutes."
             print(f"[Error Handler] YouTube block detected and Invidious fallback failed. Original error: {err_low}", flush=True)
         elif 'unsupported url' in err_low:
