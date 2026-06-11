@@ -517,16 +517,21 @@ def download_thread(task_id, url, quality, download_type):
     else:
         # mp4 video download — use a fallback chain so any quality always resolves
         if quality == 'best':
-            # Best separate streams → best combined → any
-            fmt_spec = 'bestvideo+bestaudio/bestvideo/best'
+            fmt_spec = (
+                'bestvideo[ext=mp4]+bestaudio[ext=m4a]'
+                '/bestvideo[ext=mp4]+bestaudio'
+                '/bestvideo+bestaudio'
+                '/best[ext=mp4]/best'
+            )
         else:
             height = quality.replace('p', '')
-            # Exact height → any height at or below → any combined → any
             fmt_spec = (
-                f'bestvideo[height<={height}]+bestaudio'
-                f'/bestvideo[height<={height}]'
-                f'/bestvideo+bestaudio'
-                f'/best'
+                f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]'
+                f'/bestvideo[height<={height}][ext=mp4]+bestaudio'
+                f'/bestvideo[height<={height}]+bestaudio'
+                f'/best[height<={height}][ext=mp4]'
+                f'/best[height<={height}]'
+                f'/best[ext=mp4]/best'
             )
 
         ydl_opts = {
