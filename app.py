@@ -467,13 +467,13 @@ def progress_hook(task_id):
 class YTDLLogger:
     def debug(self, msg):
         if not msg.startswith('[download]'):
-            print(f"[yt-dlp Debug] {msg}")
+            print(f"[yt-dlp Debug] {msg}", flush=True)
 
     def warning(self, msg):
-        print(f"[yt-dlp Warning] {msg}")
+        print(f"[yt-dlp Warning] {msg}", flush=True)
 
     def error(self, msg):
-        print(f"[yt-dlp Error] {msg}")
+        print(f"[yt-dlp Error] {msg}", flush=True)
 def download_thread(task_id, url, quality, download_type):
     """Task target function executing downloading in background."""
     task_dir = os.path.join(DOWNLOADS_DIR, task_id)
@@ -773,28 +773,45 @@ def get_formats():
             })
             
     except Exception as e:
+        import traceback
+        tb_str = traceback.format_exc()
+        
         err_msg  = str(e)
+        if not err_msg:
+            err_msg = repr(e)
+            
         err_low  = err_msg.lower()
         is_yt    = 'youtube.com' in url.lower() or 'youtu.be' in url.lower()
         is_bot   = 'sign in' in err_low or 'bot' in err_low or 'confirm' in err_low
+        
+        user_msg = "Failed to retrieve formats."
+        
         # Auto-retry via Invidious when YouTube blocks the server IP
         if is_yt and is_bot:
             inv_data = _invidious_formats(url)
             if inv_data:
                 return jsonify(inv_data)
-            err_msg = "YouTube is blocking this server and the automatic fallback also failed. Please try again in a few minutes."
-            print(f"[Error Handler] YouTube block detected and Invidious fallback failed. Original error: {err_low}")
+            user_msg = "YouTube is blocking this server and the automatic fallback also failed. Please try again in a few minutes."
+            print(f"[Error Handler] YouTube block detected and Invidious fallback failed. Original error: {err_low}", flush=True)
         elif 'unsupported url' in err_low:
-            err_msg = "Unsupported website or invalid URL. Please check the link and try again."
+            user_msg = "Unsupported website or invalid URL. Please check the link and try again."
         elif 'unable to download webpage' in err_low or 'connection' in err_low or 'reset' in err_low:
-            err_msg = "Unable to access the webpage. Check your internet connection or the URL's validity."
+            user_msg = "Unable to access the webpage. Check your internet connection or the URL's validity."
         elif 'requested format is not available' in err_low:
-            err_msg = "The requested video quality is not available for this link."
+            user_msg = "The requested video quality is not available for this link."
         elif 'video unavailable' in err_low or 'private' in err_low:
-            err_msg = "This video is unavailable, private, or age-restricted."
+            user_msg = "This video is unavailable, private, or age-restricted."
         
-        print(f"[API Error] /formats failed: {err_msg} | Root Cause: {err_low}")
-        return jsonify({'error': err_msg}), 500
+        print(f"\n{'='*50}\n[API Error] /formats failed!\nURL: {url}\nException Type: {type(e).__name__}\nrepr(e): {repr(e)}\nstr(e): {err_msg}\n\nTraceback:\n{tb_str}\n{'='*50}\n", flush=True)
+        
+        return jsonify({
+            'error': user_msg,
+            'debug_info': {
+                'type': type(e).__name__,
+                'message': err_msg,
+                'traceback': tb_str
+            }
+        }), 500
     finally:
         # cleanup temp cookiefile
         try:
