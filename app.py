@@ -649,7 +649,7 @@ def index():
 @app.route('/formats', methods=['POST'])
 def get_formats():
     """Fetches video metadata and returns available qualities + size estimations."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     # support both application/json and multipart/form-data or form-encoded
     if not data:
         data = request.form.to_dict()
@@ -819,7 +819,7 @@ def get_formats():
 @app.route('/download', methods=['POST'])
 def start_download():
     """Initializes background download thread and registers tasks details."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     # support both application/json and multipart/form-data or form-encoded
     if not data:
         data = request.form.to_dict()
