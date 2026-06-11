@@ -33,15 +33,21 @@ SERVER_COOKIES_FILE = os.path.join(BASE_DIR, 'cookies.txt')
 # When YouTube blocks the server IP, the app automatically retries by querying
 # these public Invidious instances to obtain signed stream URLs.
 _INVIDIOUS_INSTANCES = [
-    'https://invidious.jing.rocks',
-    'https://inv.tux.pizza',
     'https://yewtu.be',
+    'https://inv.tux.pizza',
     'https://invidious.privacydev.net',
+    'https://invidious.flokinet.to',
     'https://inv.riverside.rocks',
-    'https://iv.datura.network',
     'https://invidious.nerdvpn.de',
     'https://invidious.perennialte.ch',
-    'https://invidious.flokinet.to',
+    'https://iv.datura.network',
+    'https://invidious.jing.rocks',
+    'https://invidious.io.lol',
+    'https://invidious.fdn.fr',
+    'https://invidious.protokolla.fi',
+    'https://iv.melmac.space',
+    'https://invidious.asir.dev',
+    'https://invidious.darkness.services',
 ]
 _SSL_CTX = ssl.create_default_context()
 _UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
@@ -665,7 +671,17 @@ def get_formats():
     url = data['url'].strip()
     if not url:
         return jsonify({'error': 'URL cannot be empty'}), 400
-        
+
+    # For YouTube URLs, try Invidious first — it doesn't get blocked by YouTube's
+    # datacenter IP restrictions, so it's far more reliable on shared servers.
+    is_yt_url = 'youtube.com' in url.lower() or 'youtu.be' in url.lower()
+    if is_yt_url:
+        inv_data = _invidious_formats(url)
+        if inv_data:
+            print(f"[Invidious] Successfully fetched formats for {url}", flush=True)
+            return jsonify(inv_data)
+        print(f"[Invidious] All instances failed for {url}, falling back to yt-dlp", flush=True)
+
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
