@@ -492,7 +492,7 @@ def download_thread(task_id, url, quality, download_type):
         'fragment_retries': 5,
         'extractor_args': {
             'youtube': {
-                'player_client': ['tv_embedded', 'ios', 'android', 'default'],
+                'player_client': ['ios', 'android', 'tv_embedded', 'default'],
                 'skip': ['translated_subs']
             }
         }
@@ -667,9 +667,10 @@ def get_formats():
         'skip_download': True,
         'logger': YTDLLogger(),
         'retries': 3,
+        'format': 'bestvideo*+bestaudio/bestvideo/bestaudio/best',
         'extractor_args': {
             'youtube': {
-                'player_client': ['tv_embedded', 'ios', 'android', 'default'],
+                'player_client': ['ios', 'android', 'tv_embedded', 'default'],
                 'skip': ['translated_subs']
             }
         }
