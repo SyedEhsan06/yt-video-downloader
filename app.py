@@ -691,6 +691,20 @@ threading.Thread(target=cleanup_old_files, daemon=True).start()
 
 # --- ROUTES ---
 
+@app.errorhandler(500)
+def handle_500(e):
+    """Always return JSON for server errors so the frontend can parse them
+    instead of choking on Flask's default HTML error page."""
+    import traceback
+    return jsonify({
+        'error': 'Internal server error.',
+        'debug_info': {
+            'type': type(e).__name__,
+            'message': str(e),
+            'traceback': traceback.format_exc(),
+        }
+    }), 500
+
 @app.route('/')
 def index():
     """Serves the main application landing page."""
@@ -715,11 +729,15 @@ def get_formats():
     # datacenter IP restrictions, so it's far more reliable on shared servers.
     is_yt_url = 'youtube.com' in url.lower() or 'youtu.be' in url.lower()
     if is_yt_url:
-        inv_data = _invidious_formats(url)
-        if inv_data:
-            print(f"[Invidious] Successfully fetched formats for {url}", flush=True)
-            return jsonify(inv_data)
-        print(f"[Invidious] All instances failed for {url}, falling back to yt-dlp", flush=True)
+        try:
+            inv_data = _invidious_formats(url)
+            if inv_data:
+                print(f"[Invidious] Successfully fetched formats for {url}", flush=True)
+                return jsonify(inv_data)
+            print(f"[Invidious] All instances failed for {url}, falling back to yt-dlp", flush=True)
+        except Exception as e:
+            # Never let an Invidious failure crash the route — fall through to yt-dlp.
+            print(f"[Invidious] Unexpected error, falling back to yt-dlp: {e}", flush=True)
 
     ydl_opts = {
         'quiet': True,
@@ -845,7 +863,11 @@ def get_formats():
         
         # Auto-retry via Invidious when YouTube blocks the server IP
         if is_yt and is_bot:
-            inv_data = _invidious_formats(url)
+            try:
+                inv_data = _invidious_formats(url)
+            except Exception as inv_err:
+                inv_data = None
+                print(f"[Error Handler] Invidious fallback raised: {inv_err}", flush=True)
             if inv_data:
                 return jsonify(inv_data)
             user_msg = "YouTube is blocking this server and the automatic fallback also failed. Please try again in a few minutes."
