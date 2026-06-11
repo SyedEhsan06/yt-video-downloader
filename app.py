@@ -39,6 +39,9 @@ _INVIDIOUS_INSTANCES = [
     'https://invidious.privacydev.net',
     'https://inv.riverside.rocks',
     'https://iv.datura.network',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.perennialte.ch',
+    'https://invidious.flokinet.to',
 ]
 _SSL_CTX = ssl.create_default_context()
 _UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
@@ -74,9 +77,12 @@ def _invidious_fetch(video_id):
                     data = json.loads(r.read().decode('utf-8'))
                     if data.get('adaptiveFormats') or data.get('formatStreams'):
                         return data, base
+        except urllib.error.HTTPError as e:
+            print(f"[Invidious] Instance {base} returned HTTP {e.code}: {e.reason}")
         except Exception as e:
-            print(f"[Fallback] Invidious instance {base} failed: {str(e)}")
+            print(f"[Invidious] Instance {base} failed: {str(e)}")
             continue
+    print("[Invidious] All fallback instances failed or are rate-limiting this server.")
     return None, None
 
 
@@ -105,6 +111,13 @@ def _stream_download(url, dest_path, task_id, pct_start=0, pct_end=100):
 
 def _invidious_download(task_id, url, quality, download_type, task_dir):
     """Fallback YouTube downloader via Invidious API. Returns True on success."""
+    if not shutil.which('ffmpeg'):
+        print("[Invidious] FATAL: FFmpeg is not installed on this server. Fallback cannot merge streams.")
+        with task_lock:
+            if task_id in download_tasks:
+                download_tasks[task_id]['error'] = "Server Error: FFmpeg is not installed. Contact administrator."
+        return False
+
     video_id = _extract_youtube_id(url)
     if not video_id:
         return False
@@ -453,13 +466,14 @@ def progress_hook(task_id):
 
 class YTDLLogger:
     def debug(self, msg):
-        print(msg)
+        if not msg.startswith('[download]'):
+            print(f"[yt-dlp Debug] {msg}")
 
     def warning(self, msg):
-        print(msg)
+        print(f"[yt-dlp Warning] {msg}")
 
     def error(self, msg):
-        print(msg)
+        print(f"[yt-dlp Error] {msg}")
 def download_thread(task_id, url, quality, download_type):
     """Task target function executing downloading in background."""
     task_dir = os.path.join(DOWNLOADS_DIR, task_id)
@@ -477,6 +491,7 @@ def download_thread(task_id, url, quality, download_type):
         'retries': 5,
         'fragment_retries': 5,
         # Bypasses: Impersonate a real browser and use server-friendly clients
+        'impersonate': 'chrome',
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv_embedded', 'ios', 'android', 'default'],
@@ -592,9 +607,9 @@ def download_thread(task_id, url, quality, download_type):
             except Exception:
                 pass
         tb_str = traceback.format_exc()
-        with task_lock:
-            download_tasks[task_id]['status'] = 'failed'
-            download_tasks[task_id]['error'] = str(e)
+            if download_tasks.get(task_id) and download_tasks[task_id]['status'] != 'completed':
+                download_tasks[task_id]['status'] = 'failed'
+                download_tasks[task_id]['error'] = str(e)
     finally:
         # remove cookie file from task dir if created
         try:
@@ -654,6 +669,7 @@ def get_formats():
         'logger': YTDLLogger(),
         'retries': 3,
         # Bypasses: Impersonate a real browser and use server-friendly clients
+        'impersonate': 'chrome',
         'extractor_args': {
             'youtube': {
                 'player_client': ['tv_embedded', 'ios', 'android', 'default'],
@@ -766,10 +782,17 @@ def get_formats():
             if inv_data:
                 return jsonify(inv_data)
             err_msg = "YouTube is blocking this server and the automatic fallback also failed. Please try again in a few minutes."
+            print(f"[Error Handler] YouTube block detected and Invidious fallback failed. Original error: {err_low}")
         elif 'unsupported url' in err_low:
             err_msg = "Unsupported website or invalid URL. Please check the link and try again."
-        elif 'unable to download webpage' in err_low or 'connection' in err_low:
+        elif 'unable to download webpage' in err_low or 'connection' in err_low or 'reset' in err_low:
             err_msg = "Unable to access the webpage. Check your internet connection or the URL's validity."
+        elif 'requested format is not available' in err_low:
+            err_msg = "The requested video quality is not available for this link."
+        elif 'video unavailable' in err_low or 'private' in err_low:
+            err_msg = "This video is unavailable, private, or age-restricted."
+        
+        print(f"[API Error] /formats failed: {err_msg} | Root Cause: {err_low}")
         return jsonify({'error': err_msg}), 500
     finally:
         # cleanup temp cookiefile
@@ -854,21 +877,6 @@ def download_file(task_id):
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found on server disk'}), 404
         
-    # Spin a quick thread to wipe file and clean task storage in 180 seconds
-    def delayed_cleanup(path_to_clean, tid):
-        time.sleep(180)
-        try:
-            task_dir = os.path.dirname(path_to_clean)
-            if os.path.exists(task_dir) and os.path.basename(task_dir) == tid:
-                shutil.rmtree(task_dir)
-                with task_lock:
-                    if tid in download_tasks:
-                        del download_tasks[tid]
-        except Exception as e:
-            print(f"Delayed cleanup warning: {e}")
-            
-    threading.Thread(target=delayed_cleanup, args=(filepath, task_id), daemon=True).start()
-    
     return send_file(filepath, as_attachment=True, download_name=filename)
 
 if __name__ == '__main__':
